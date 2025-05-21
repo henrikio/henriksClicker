@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Henrik's Clicker Empire - Rebirth Edition</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      padding: 2rem;
+      transition: background 0.5s ease, color 0.5s ease;
+    }
+    body.light {
+      background: linear-gradient(to right, #f8f8f8, #e0e0e0);
+      color: #222;
+    }
+    body.dark {
+      background: linear-gradient(to right, #1e3c72, #2a5298);
+      color: white;
+    }
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    #clickerButton {
+      padding: 1rem 2rem;
+      font-size: 2rem;
+      border: none;
+      border-radius: 10px;
+      background-color: #ffcc00;
+      color: #333;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+      transition: all 0.2s ease;
+    }
+    #clickerButton:hover {
+      transform: scale(1.05);
+      background-color: #ffe066;
+    }
+    #score {
+      font-size: 4rem;
+      font-weight: bold;
+      margin: 2rem 0;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+      transition: transform 0.2s ease;
+    }
+    .animate {
+      transform: scale(1.1);
+    }
+    .shop {
+      margin-top: 2rem;
+    }
+    .item {
+      background-color: rgba(255,255,255,0.1);
+      padding: 1rem;
+      margin: 1rem auto;
+      border-radius: 10px;
+      max-width: 400px;
+      transition: background-color 0.3s ease;
+    }
+    body.light .item {
+      background-color: rgba(0,0,0,0.05);
+    }
+    .item:hover {
+      background-color: rgba(255,255,255,0.2);
+    }
+    button.buy {
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      background-color: #00ffcc;
+      color: #222;
+      cursor: pointer;
+    }
+    #resetButton, #toggleTheme, #rebirthButton {
+      margin-top: 2rem;
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #resetButton {
+      background-color: #ff4d4d;
+      color: white;
+      margin-right: 1rem;
+    }
+    #toggleTheme {
+      background-color: #4444ff;
+      color: white;
+      margin-right: 1rem;
+    }
+    #rebirthButton {
+      background-color: #6a0dad;
+      color: white;
+      display: none; /* skjult til poeng threshold */
+    }
+    .footer {
+      margin-top: 3rem;
+      font-size: 0.9rem;
+      color: #ccc;
+    }
+    /* Flash overlay for theme switch */
+    #themeFlash {
+      position: fixed;
+      top:0; left:0; right:0; bottom:0;
+      background: white;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 9999;
+      transition: opacity 0.25s ease;
+    }
+  </style>
+</head>
+<body class="dark">
+
+  <h1>🚀 Henrik's Clicker Empire 🚀</h1>
+  <button id="clickerButton">Klikk meg!</button>
+  <div id="score">Poeng: 0</div>
+
+  <div class="shop">
+    <h2>🛒 Shop</h2>
+    <div id="shopItems"></div>
+  </div>
+
+  <div>
+    <button id="resetButton">🔄 Reset Game</button>
+    <button id="toggleTheme">🌙 Bytt Tema</button>
+    <button id="rebirthButton">♻️ Rebirth (Start Fresh, Bli Sterkere)</button>
+  </div>
+
+  <div class="footer">
+    madebyhenrik – Versjon 4.0
+  </div>
+
+  <div id="themeFlash"></div>
+
+  <!-- Lyd -->
+  <audio id="clickSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_d82c1e7b36.mp3?filename=mouse-click-153941.mp3" preload="auto"></audio>
+  <audio id="buySound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_20427442f5.mp3?filename=click-124467.mp3" preload="auto"></audio>
+  <audio id="rebirthSound" src="https://cdn.pixabay.com/download/audio/2022/03/23/audio_449ccdf90e.mp3?filename=power-up-49312.mp3" preload="auto"></audio>
+
+  <script>
+    let score = 0;
+    let basePps = 0;
+    let pps = 0;
+    let rebirthCount = 0;
+    let clickMultiplier = 1;
+    let ppsMultiplier = 1;
+
+    const clickSound = document.getElementById('clickSound');
+    const buySound = document.getElementById('buySound');
+    const rebirthSound = document.getElementById('rebirthSound');
+    const scoreDisplay = document.getElementById('score');
+    const shopContainer = document.getElementById('shopItems');
+    const rebirthButton = document.getElementById('rebirthButton');
+
+    const REBIRTH_THRESHOLD = 100000; // Må nå 100k poeng for å rebirthe
+
+    // Definer shop-items med base stats
+    const baseItems = {
+      1: { name: "🧃 Koffein-tabletter", count: 0, basePrice: 50, price: 50, pps: 1 },
+      2: { name: "💻 Streamingrigg", count: 0, basePrice: 300, price: 300, pps: 5 },
+      3: { name: "⛏️ Crypto-miner", count: 0, basePrice: 1000, price: 1000, pps: 15 },
+      4: { name: "🤖 AI-assistent", count: 0, basePrice: 5000, price: 5000, pps: 40 },
+      5: { name: "🏁 F1-Team", count: 0, basePrice: 25000, price: 25000, pps: 100 }
+    };
+
+    // Vi kopierer for å unngå direkte mutasjon ved load
+    let items = JSON.parse(JSON.stringify(baseItems));
+
+    // Klikkknapp - gir poeng, med multiplikator fra rebirth
+    document.getElementById('clickerButton').addEventListener('click', () => {
+      score += clickMultiplier;
+      clickSound.play();
+      animateScore();
+      updateDisplay();
+      saveGame();
+      checkRebirthAvailability();
+    });
+
+    // Reset knapp – nullstiller ALT uten multiplikator
+    document.getElementById('resetButton').addEventListener('click', () => {
+      if (confirm("Er du sikker på at du vil resette hele spillet? 😬")) {
+        localStorage.removeItem("clickerGameSave");
+        resetGame(false);
+      }
+    });
+
+    // Tema toggle med animasjon
+    document.getElementById('toggleTheme').addEventListener('click', () => {
+      const flash = document.getElementById('themeFlash');
+      flash.style.opacity = '1';
+      setTimeout(() => {
+        if (document.body.classList.contains("light")) {
+          document.body.classList.replace("light", "dark");
+        } else {
+          document.body.classList.replace("dark", "light");
+        }
+        saveGame();
+        flash.style.opacity = '0';
+      }, 250);
+    });
+
+    // Rebirth knapp – reset med multiplikator boost
+    rebirthButton.addEventListener('click', () => {
+      if (score >= REBIRTH_THRESHOLD) {
+        rebirthSound.play();
+        rebirthCount++;
+        alert(`♻️ Rebirth fullført! Nå har du ${rebirthCount} rebirth${rebirthCount > 1 ? 's' : ''}, og tjener mer poeng per klikk og sekund!`);
+        resetGame(true);
+      }
+    });
+
+    // Kjøp item
+    function buyItem(id) {
+      const item = items[id];
+      if (score >= item.price) {
+        score -= item.price;
+        item.count++;
+        item.price = Math.floor(item.basePrice * Math.pow(1.15, item.count));
+        recalcPps();
+        buySound.play();
+        updateDisplay();
+        saveGame();
+        checkRebirthAvailability();
+      }
+    }
+
+    // Regn ut poeng per sekund basert på eide items * multiplikator
+    function recalcPps() {
+      basePps = 0;
+      for (const id in items) {
+        basePps += items[id].pps * items[id].count;
+      }
+      pps = basePps * ppsMultiplier;
+    }
+
+    // Animasjon score (liten zoom)
+    function animateScore() {
+      scoreDisplay.classList.add("animate");
+      setTimeout(() => {
+        scoreDisplay.classList.remove("animate");
+      }, 150);
+    }
+
+    // Oppdater score og shop display
+    function updateDisplay() {
+      scoreDisplay.textContent = `Poeng: ${score.toLocaleString()}`;
+
+      for (const id in items) {
+        const countEl = document.getElementById(`item${id}Count`);
+        const priceEl = document.getElementById(`item${id}Price`);
+        if (countEl) countEl.textContent = items[id].count;
+        if (priceEl) priceEl.textContent = itemPriceFormatted(items[id].price);
+      }
+
+      rebirthButton.style.display = score >= REBIRTH_THRESHOLD ? 'inline-block' : 'none';
+      document.getElementById('rebirthButton').textContent = `♻️ Rebirth (krav: ${REBIRTH_THRESHOLD.toLocaleString()} poeng)`;
+    }
+
+    // Formater pris med tusenskiller
+    function itemPriceFormatted(price) {
+      return price.toLocaleString();
+    }
+
+    // Generer shop items i DOM
+    function generateShop() {
+      shopContainer.innerHTML = '';
+      for (const id in items) {
+        const item = items[id];
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.innerHTML = `
+          <strong>${item.name}</strong><br>
+          Gir +${item.pps} poeng/sek<br>
+          Eier: <span id="item${id}Count">${item.count}</span><br>
+          Pris: <span id="item${id}Price">${itemPriceFormatted(item.price)}</span> poeng<br>
+          <button class="buy" onclick="buyItem(${id})">Kjøp</button>
+        `;
+        shopContainer.appendChild(div);
+      }
+    }
+
+    // Resett spill
+    // rebirth: boolean som avgjør om vi øker multiplikatorer
+    function resetGame(rebirth) {
+      score = 0;
+      for (const id in items) {
+        items[id].count = 0;
+        items[id].price = items[id].basePrice;
+      }
+      if (rebirth) {
+        clickMultiplier = 1 + rebirthCount * 0.5; // +50% per rebirth på klikk
+        ppsMultiplier = 1 + rebirthCount * 0.5;   // +50% per rebirth på pps
+      } else {
+        rebirthCount = 0;
+        clickMultiplier = 1;
+        ppsMultiplier = 1;
+      }
+      recalcPps();
+      updateDisplay();
+      generateShop();
+      saveGame();
+      checkRebirthAvailability();
+    }
+
+    // Sjekk om rebirth-knapp skal vises
+    function checkRebirthAvailability() {
+      if(score >= REBIRTH_THRESHOLD){
+        rebirthButton.style.display = 'inline-block';
+      } else {
+        rebirthButton.style.display = 'none';
+      }
+    }
+
+    // Lagre spilldata i localStorage
+    function saveGame() {
+      const saveData = {
+        score,
+        basePps,
+        pps,
+        rebirthCount,
+        clickMultiplier,
+        ppsMultiplier,
+        items,
+        theme: document.body.classList.contains("dark") ? "dark" : "light"
+      };
+      localStorage.setItem("clickerGameSave", JSON.stringify(saveData));
+    }
+
+    // Last spill fra localStorage
+    function loadGame() {
+      const saved = localStorage.getItem("clickerGameSave");
+      if (saved) {
+        const data = JSON.parse(saved);
+        score = data.score || 0;
+        basePps = data.basePps || 0;
+        pps = data.pps || 0;
+        rebirthCount = data.rebirthCount || 0;
+        clickMultiplier = data.clickMultiplier || 1;
+        ppsMultiplier = data.ppsMultiplier || 1;
+        // Last items men merge med baseItems for sikkerhet
+        if(data.items){
+          for(const id in baseItems){
+            if(data.items[id]){
+              items[id].count = data.items[id].count || 0;
+              items[id].price = data.items[id].price || baseItems[id].basePrice;
+            }
+          }
+        }
+        if (data.theme === "light" || data.theme === "dark") {
+          document.body.className = data.theme;
+        } else {
+          document.body.className = "dark";
+        }
+      } else {
+        // Default state
+        document.body.className = "dark";
+      }
+      recalcPps();
+      generateShop();
+      updateDisplay();
+      checkRebirthAvailability();
+    }
+
+    // Auto-increment poeng per sekund
+    setInterval(() => {
+      score += pps;
+      updateDisplay();
+      saveGame();
+      checkRebirthAvailability();
+    }, 1000);
+
+    // Animasjon score display ved oppdatering (om du klikker eller kjøper)
+    function animateScore() {
+      scoreDisplay.classList.add("animate");
+      setTimeout(() => {
+        scoreDisplay.classList.remove("animate");
+      }, 150);
+    }
+
+    // Start spillet
+    loadGame();
+  </script>
+
+</body>
+</html>
